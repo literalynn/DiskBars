@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# Usage: dkb [bar_width]  (default 30)
+set -euo pipefail
+if [ "${EUID:-$(id -u)}" -ne 0 ]; then exec sudo -- "$0" "$@"; fi
+
+W=${1:-30}
+
+# Detect locale
+LC="${LC_ALL:-${LANG:-en_US}}"
+if [[ "$LC" =~ ^fr(_|-) || "$LC" == fr ]]; then
+  IS_FR=1
+  HDR_PHYS="=== Disques physiques ==="
+  HDR_MFS="=== MergerFS ==="
+  UNIT_TB="To"; UNIT_GB="Go"
+else
+  IS_FR=0
+  HDR_PHYS="=== Physical disks ==="
+  HDR_MFS="=== MergerFS mounts ==="
+  UNIT_TB="TB"; UNIT_GB="GB"
+fi
+
+RED=$'\033[31m'; BOLD=$'\033[1m'; RESET=$'\033[0m'
+
+echo "${BOLD}${HDR_PHYS}${RESET}"
+
+phys_json="$(lsblk -b -J -o NAME,TYPE,SIZE,MODEL,FSUSED || true)"
+echo "$phys_json" | jq -r '
+  .blockdevices? // []
+  | map(select(.type=="disk"))
+  | .[]
+  | [
+      (.name // "unk"),
+      (.model // "Unknown"),
+      (.size // 0),
+      ( [ . | .. | objects | .fsused? | tonumber? ] | add // 0 )
+    ] | @tsv
+' | awk -F '\t' -v w="$W" -v RED="$RED" -v RESET="$RESET" -v IS_FR="$IS_FR" -v UTB="$UNIT_TB" -v UGB="$UNIT_GB" '
+function fmt_pair(bytes, total,   s){
+  if (total >= 1e12) s = sprintf("%.1f %s", bytes/1e12, UTB);
+  else               s = sprintf("%.1f %s", bytes/1e9,  UGB);
+  if (IS_FR) gsub(/\./,",",s);
+  return s;
+}
+{
+  n++; name[n]=$1; model[n]=$2; size[n]=$3+0; used[n]=$4+0;
+  if(length(name[n])>nw) nw=length(name[n]);
+}
+END{
+  if(n==0){ print "(no disks detected)"; exit 0 }
+  for(i=1;i<=n;i++){
+    sz=size[i]; us=used[i];
+    pct = (sz>0? us*100/sz : 0);
+
+    # bar
+    filled=int(pct*w/100); bar=""; for(j=0;j<filled;j++) bar=bar"█"; for(j=filled;j<w;j++) bar=bar"░";
+
+    # short capacity right after name: TB/TB or GB/Go
+    if (sz >= 1e12) { capnum=int(sz/1e12+0.5); capunit=UTB; }
+    else            { capnum=int(sz/1e9 +0.5); capunit=UGB; }
+
+    useds = fmt_pair(us, sz);
+    sizes = fmt_pair(sz, sz);
+
+    pctstr = sprintf("%5.1f%%", pct);
+    if (IS_FR) gsub(/\./,",",pctstr);
+
+    popen = RED "(" RESET; slash = RED "/" RESET; pclose = RED ")" RESET;
+
+    printf "%-*s %s%3d%s%s  %-26.26s [%s] %6s  %s%s%s%s%s\n",
+           nw, name[i], RED, capnum, capunit, RESET, model[i], bar, pctstr,
+           popen, useds, slash, sizes, pclose;
+  }
+}
+
+# ---- MergerFS section
+' >/tmp/dkb_phys.txt
+
+cat /tmp/dkb_phys.txt
+echo
+echo "${BOLD}${HDR_MFS}${RESET}"
+
+df -B1 -TP | awk -v w="$W" -v RED="$RED" -v RESET="$RESET" -v IS_FR="$IS_FR" -v UTB="$UNIT_TB" -v UGB="$UNIT_GB" '
+function fmt_pair(bytes, total,   s){
+  if (total >= 1e12) s = sprintf("%.1f %s", bytes/1e12, UTB);
+  else               s = sprintf("%.1f %s", bytes/1e9,  UGB);
+  if (IS_FR) gsub(/\./,",",s);
+  return s;
+}
+$2=="fuse.mergerfs" && NR>1 {
+  mnt=$7; n=mnt; gsub(/.*\//,"",n); if(n=="") n="/";
+  i++; name[i]=n; size[i]=$3+0; used[i]=$4+0;
+  if(length(n)>nw) nw=length(n);
+}
+END{
+  if(i==0){ print (IS_FR? "(aucun mount mergerfs)" : "(no mergerfs mounts)"); exit 0 }
+  for(k=1;k<=i;k++){
+    sz=size[k]; us=used[k];
+    pct = (sz>0? us*100/sz : 0);
+
+    filled=int(pct*w/100); bar=""; for(j=0;j<filled;j++) bar=bar"█"; for(j=filled;j<w;j++) bar=bar"░";
+
+    if (sz >= 1e12) { capnum=int(sz/1e12+0.5); capunit=UTB; }
+    else            { capnum=int(sz/1e9 +0.5); capunit=UGB; }
+
+    useds = fmt_pair(us, sz);
+    sizes = fmt_pair(sz, sz);
+
+    pctstr = sprintf("%5.1f%%", pct);
+    if (IS_FR) gsub(/\./,",",pctstr);
+
+    popen = RED "(" RESET; slash = RED "/" RESET; pclose = RED ")" RESET;
+
+    printf "%-*s %s%3d%s%s  %-9s [%s] %6s  %s%s%s%s%s\n",
+           nw, name[k], RED, capnum, capunit, RESET, "mergerfs", bar, pctstr,
+           popen, useds, slash, sizes, pclose;
+  }
+}
+'
