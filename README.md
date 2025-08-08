@@ -1,5 +1,6 @@
 # dkb — Disk bars viewer
 
+```bash
 $ dkb
 === Disques physiques ===
 sda  12To  TOSHIBA MG07ACA12TE        [██████████████████░░░░░░░░░░░░]  61,8%  (7,4 To/12,0 To)
@@ -12,6 +13,9 @@ sdf 500Go  Samsung SSD 870 EVO 500GB  [████████████░�
 === MergerFS ===
 pool   62To  mergerfs  [████████████████░░░░░░░░░░░░░░]  56,4%  (34,8 To/61,7 To)
 media  26To  mergerfs  [██████████████████░░░░░░░░░░░░]  60,4%  (15,7 To/26,0 To)
+```
+
+## Installation (1-ligne)
 ```bash
 sudo apt update && sudo apt install -y jq curl \
 && sudo curl -fsSL https://raw.githubusercontent.com/literalynn/dkb/main/dkb -o /usr/local/bin/dkb \
