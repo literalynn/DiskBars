@@ -8,7 +8,7 @@ Tailles < 1 TB affichées en **Go/GB**.
 ## Installation (1-ligne)
 ```bash
 sudo apt update && sudo apt install -y jq curl \
-&& sudo curl -fsSL https://raw.githubusercontent.com/<TON_USER>/dkb/main/dkb -o /usr/local/bin/dkb \
+&& sudo curl -fsSL https://raw.githubusercontent.com/literalynn/dkb/main/dkb -o /usr/local/bin/dkb \
 && sudo chmod +x /usr/local/bin/dkb && dkb
 ```
 
